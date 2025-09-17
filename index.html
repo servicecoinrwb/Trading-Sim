@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Trading Simulator 6.2</title>
+    <style>
+        /* --- Basic Styling (The CSS) --- */
+        :root {
+            --bg-color: #121212;
+            --container-bg: #1E1E1E;
+            --border-color: #333;
+            --text-color: #EAEAEA;
+            --text-soft-color: #B0B0B0;
+            --bitcoin-orange: #f7931a;
+            --price-green: #26a69a;
+            --price-red: #ef5350;
+            --highlight-blue: #29B6F6;
+            --warn-yellow: #fdd835;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #container {
+            background-color: var(--container-bg);
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 800px;
+            width: 100%;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        #scenario-info {
+            background-color: #2c2c2c;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        #scenario-info h3 { margin: 0 0 5px 0; color: var(--bitcoin-orange); }
+        #scenario-info p { margin: 0; font-size: 0.9em; color: var(--text-soft-color); }
+        
+        #chart-container {
+            background-color: #000;
+            border-radius: 8px;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .chart-overlay-display {
+            position: absolute;
+            background-color: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            z-index: 10;
+        }
+        #pl-display { top: 10px; left: 10px; }
+        #rr-display { top: 10px; right: 10px; }
+        .rr-good { color: var(--price-green); }
+        .rr-ok { color: var(--warn-yellow); }
+        .rr-bad { color: var(--price-red); }
+        
+        #chart-svg { width: 100%; height: 300px; }
+
+        .candlestick.up { fill: var(--price-green); stroke: var(--price-green); }
+        .candlestick.down { fill: var(--price-red); stroke: var(--price-red); }
+        .wick { stroke-width: 1; }
+        .price-axis text { font-size: 10px; fill: var(--text-soft-color); }
+        .grid-line { stroke: #2a2a2a; stroke-width: 1; }
+
+        .price-line { stroke-width: 2; stroke-dasharray: 4; cursor: ns-resize; opacity: 0.8; }
+        #sl-line { stroke: var(--price-red); }
+        #tp-line { stroke: var(--price-green); }
+        #limit-line { stroke: var(--highlight-blue); }
+
+        .price-label { font-size: 10px; font-weight: bold; pointer-events: none; }
+        #sl-label { fill: var(--price-red); }
+        #tp-label { fill: var(--price-green); }
+        #limit-label { fill: var(--highlight-blue); }
+
+        h1 { text-align: center; color: #FFFFFF; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
+
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: center; }
+
+        button {
+            padding: 12px 24px; font-size: 16px; font-weight: bold;
+            border-radius: 8px; border: none; cursor: pointer;
+            transition: all 0.2s ease; color: white;
+        }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.4); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #order-type-selector {
+            grid-column: 1 / -1; display: flex;
+            background-color: #2c2c2c; border-radius: 8px; padding: 4px;
+        }
+        .order-type-btn { flex: 1; padding: 8px; background-color: transparent; }
+        .order-type-btn.active { background-color: var(--border-color); box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
+
+        #long-button { background-color: var(--price-green); }
+        #short-button { background-color: var(--price-red); }
+        #confirm-button { background-color: var(--highlight-blue); grid-column: 1 / span 1; }
+        #cancel-button { background-color: #616161; grid-column: 2 / span 1; }
+        #reset-button { background-color: #616161; grid-column: 1 / -1; }
+        #close-button { background-color: var(--bitcoin-orange); grid-column: 1 / -1;}
+        
+        #calculator {
+            background-color: #2c2c2c; border-radius: 8px;
+            padding: 15px; margin-top: 20px;
+        }
+        .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .calc-item { display: flex; flex-direction: column; }
+        .calc-item label { font-size: 0.8em; color: var(--text-soft-color); margin-bottom: 5px; }
+        .calc-item .value { font-size: 1.2em; font-weight: bold; }
+        #position-size {
+            background: #333; border: 1px solid #444; color: white;
+            padding: 8px; border-radius: 5px; font-size: 1.1em; width: 100%;
+        }
+        #leverage-slider { width: 100%; cursor: pointer; }
+        
+        #result-feedback {
+            display: none; padding: 15px; margin-top: 20px;
+            border-radius: 8px; text-align: center;
+            font-size: 1.5em; font-weight: bold;
+        }
+        .win { background-color: rgba(38, 166, 154, 0.2); border: 2px solid var(--price-green); color: var(--price-green); }
+        .loss { background-color: rgba(239, 83, 80, 0.2); border: 2px solid var(--price-red); color: var(--price-red); }
+        .draw { background-color: rgba(189, 189, 189, 0.2); border: 2px solid #BDBDBD; color: #BDBDBD; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Bitcoin Trade Simulator 6.2</h1>
+        <div id="scenario-info">
+            <h3 id="scenario-title"></h3>
+            <p id="scenario-desc"></p>
+        </div>
+        <div id="chart-container">
+            <div id="pl-display" class="chart-overlay-display"></div>
+            <div id="rr-display" class="chart-overlay-display"></div>
+            <svg id="chart-svg"></svg>
+        </div>
+        <div id="controls">
+             <div class="controls-grid" id="main-controls">
+                <div id="order-type-selector">
+                    <button class="order-type-btn active" id="limit-order-btn">Limit Order</button>
+                    <button class="order-type-btn" id="market-order-btn">Market Order</button>
+                </div>
+                <button id="long-button">Enter Long</button>
+                <button id="short-button">Enter Short</button>
+            </div>
+             <div class="controls-grid" id="setup-controls" style="display: none;">
+                <button id="confirm-button">Confirm Trade</button>
+                <button id="cancel-button">Cancel</button>
+            </div>
+             <div class="controls-grid" id="running-controls" style="display: none;">
+                <button id="close-button">Close Position Manually</button>
+             </div>
+             <div class="controls-grid" id="reset-controls" style="display: none;">
+                <button id="reset-button">New Scenario</button>
+             </div>
+        </div>
+        
+        <div id="calculator">
+            <div class="calc-grid">
+                <div class="calc-item">
+                    <label>Account Balance</label>
+                    <span id="balance" class="value"></span>
+                </div>
+                <div class="calc-item">
+                    <label for="position-size">Margin (USD)</label>
+                    <input type="number" id="position-size" value="1000">
+                </div>
+                <div class="calc-item">
+                    <label>Potential Profit</label>
+                    <span id="potential-profit" class="value" style="color: var(--price-green);"></span>
+                </div>
+                <div class="calc-item">
+                    <label>Potential Loss</label>
+                    <span id="potential-loss" class="value" style="color: var(--price-red);"></span>
+                </div>
+                 <div class="calc-item" style="grid-column: 1 / -1;">
+                    <label for="leverage-slider">Leverage: <span id="leverage-value">5x</span></label>
+                    <input type="range" id="leverage-slider" min="5" max="500" value="5" step="5">
+                </div>
+            </div>
+        </div>
+        
+        <div id="result-feedback"></div>
+    </div>
+    <script>
+        // --- Elements ---
+        const svg = document.getElementById('chart-svg');
+        const longButton = document.getElementById('long-button');
+        const shortButton = document.getElementById('short-button');
+        const confirmButton = document.getElementById('confirm-button');
+        const cancelButton = document.getElementById('cancel-button');
+        const resetButton = document.getElementById('reset-button');
+        const closeButton = document.getElementById('close-button');
+        const feedbackDiv = document.getElementById('result-feedback');
+        const mainControls = document.getElementById('main-controls');
+        const setupControls = document.getElementById('setup-controls');
+        const runningControls = document.getElementById('running-controls');
+        const resetControls = document.getElementById('reset-controls');
+        const scenarioTitleEl = document.getElementById('scenario-title');
+        const scenarioDescEl = document.getElementById('scenario-desc');
+        const plDisplay = document.getElementById('pl-display');
+        const rrDisplay = document.getElementById('rr-display');
+        const limitOrderBtn = document.getElementById('limit-order-btn');
+        const marketOrderBtn = document.getElementById('market-order-btn');
+        const balanceEl = document.getElementById('balance');
+        const positionSizeInput = document.getElementById('position-size');
+        const potentialProfitEl = document.getElementById('potential-profit');
+        const potentialLossEl = document.getElementById('potential-loss');
+        const leverageSlider = document.getElementById('leverage-slider');
+        const leverageValueEl = document.getElementById('leverage-value');
+
+        // --- State ---
+        let candles = [], scenarios = [];
+        let simulationInterval;
+        let isSimulating = false, tradeSetupMode = false, tradeActive = false;
+        let stopLoss = 0, takeProfit = 0, limitPrice = 0, entryPrice = 0;
+        let tradeDirection = 0, orderType = 'limit';
+        let currentScenario;
+        let balance = 10000, margin = 1000, leverage = 5;
+
+        // --- Chart Constants ---
+        let svgWidth, svgHeight, candleWidth, maxCandles;
+        function updateChartConstants() {
+            svgWidth = svg.clientWidth; svgHeight = svg.clientHeight;
+            candleWidth = 5; maxCandles = Math.floor(svgWidth / (candleWidth + 2));
+        }
+
+        // --- Price Scale & Drawing ---
+        const getPriceRange = () => {
+            const prices = candles.flatMap(c => [c.high, c.low]);
+            if(stopLoss) prices.push(stopLoss); if(takeProfit) prices.push(takeProfit); if(limitPrice) prices.push(limitPrice);
+            const minPrice = Math.min(...prices) * 0.995; const maxPrice = Math.max(...prices) * 1.005;
+            return { minPrice, maxPrice };
+        };
+        const priceToY = (price) => {
+            const { minPrice, maxPrice } = getPriceRange();
+            if (maxPrice === minPrice) return svgHeight / 2;
+            return svgHeight - ((price - minPrice) / (maxPrice - minPrice)) * svgHeight;
+        };
+        const yToPrice = (y) => {
+            const { minPrice, maxPrice } = getPriceRange();
+            return ((svgHeight - y) / svgHeight) * (maxPrice - minPrice) + minPrice;
+        };
+        
+        function drawChart() {
+            if (!svgWidth) updateChartConstants();
+            svg.innerHTML = ''; if (candles.length === 0) return;
+            const { minPrice, maxPrice } = getPriceRange();
+            const visibleCandles = candles.slice(-maxCandles);
+            
+            const priceAxis = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            priceAxis.setAttribute('class', 'price-axis');
+            const numGridLines = 6;
+            for (let i = 0; i <= numGridLines; i++) {
+                const price = minPrice + (i / numGridLines) * (maxPrice - minPrice);
+                const y = priceToY(price);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', 0); line.setAttribute('y1', y); line.setAttribute('x2', svgWidth); line.setAttribute('y2', y);
+                line.setAttribute('class', 'grid-line'); svg.appendChild(line);
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', svgWidth - 5); text.setAttribute('y', y - 5); text.setAttribute('text-anchor', 'end');
+                text.textContent = price.toFixed(2); priceAxis.appendChild(text);
+            }
+            svg.appendChild(priceAxis);
+            
+            visibleCandles.forEach((candle, i) => {
+                const x = i * (candleWidth + 2);
+                const yOpen = priceToY(candle.open); const yClose = priceToY(candle.close);
+                const yHigh = priceToY(candle.high); const yLow = priceToY(candle.low);
+                const wick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                wick.setAttribute('x1', x + candleWidth / 2); wick.setAttribute('y1', yHigh); wick.setAttribute('x2', x + candleWidth / 2); wick.setAttribute('y2', yLow);
+                wick.setAttribute('class', `wick ${candle.close >= candle.open ? 'up' : 'down'}`); svg.appendChild(wick);
+                const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                body.setAttribute('x', x); body.setAttribute('y', Math.min(yOpen, yClose)); body.setAttribute('width', candleWidth);
+                body.setAttribute('height', Math.abs(yOpen - yClose) || 1); body.setAttribute('class', `candlestick ${candle.close >= candle.open ? 'up' : 'down'}`);
+                svg.appendChild(body);
+            });
+            drawPriceLines();
+        }
+        
+        let draggedElement = null;
+        function drawPriceLines() {
+            const drawLine = (id, price, labelPrefix, className) => {
+                const y = priceToY(price); let line = document.getElementById(`${id}-line`); let label = document.getElementById(`${id}-label`);
+                if (!line) {
+                    line = document.createElementNS('http://www.w3.org/2000/svg', 'line'); line.setAttribute('id', `${id}-line`);
+                    label = document.createElementNS('http://www.w3.org/2000/svg', 'text'); label.setAttribute('id', `${id}-label`);
+                    svg.appendChild(line); svg.appendChild(label);
+                    const hitBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    hitBox.setAttribute('id', `${id}-hitbox`); hitBox.setAttribute('height', 20); hitBox.setAttribute('width', svgWidth);
+                    hitBox.setAttribute('fill', 'transparent'); hitBox.style.cursor = 'ns-resize';
+                    hitBox.addEventListener('mousedown', (e) => { if (tradeSetupMode) draggedElement = id; });
+                    svg.appendChild(hitBox);
+                }
+                line.setAttribute('x1', 0); line.setAttribute('y1', y); line.setAttribute('x2', svgWidth); line.setAttribute('y2', y);
+                line.className.baseVal = `price-line ${className}`;
+                label.setAttribute('x', 5); label.setAttribute('y', y - 5); label.textContent = `${labelPrefix}: ${price.toFixed(2)}`;
+                label.className.baseVal = `price-label ${className}`;
+                document.getElementById(`${id}-hitbox`).setAttribute('y', y - 10);
+            };
+            if (stopLoss) drawLine('sl', stopLoss, 'SL', 'sl');
+            if (takeProfit) drawLine('tp', takeProfit, 'TP', 'tp');
+            if (limitPrice && orderType === 'limit') drawLine('limit', limitPrice, tradeDirection === 1 ? 'Buy Limit' : 'Sell Limit', 'limit');
+        }
+
+        svg.addEventListener('mousemove', (e) => {
+            if (!draggedElement || !tradeSetupMode) return;
+            const y = e.clientY - svg.getBoundingClientRect().top;
+            const price = parseFloat(yToPrice(y).toFixed(2));
+            if (draggedElement === 'sl') stopLoss = price;
+            else if (draggedElement === 'tp') takeProfit = price;
+            else if (draggedElement === 'limit') limitPrice = price;
+            updateTradeMetrics(); drawChart();
+        });
+        window.addEventListener('mouseup', () => { draggedElement = null; });
+
+        // --- Scenarios & Candle Generation ---
+        function setupScenarios() {
+            scenarios = [
+                { title: "Uptrend Bull Flag", description: "After a strong impulse move up, the price is consolidating sideways. Look for a breakout to the upside." },
+                { title: "Range Consolidation", description: "The price is trapped between a clear support and resistance. Look to trade the range or wait for a breakout." },
+                { title: "Support Level Bounce", description: "Price has sold off to a key historical support level and is showing signs of bouncing. Look for a long entry." },
+                { title: "Resistance Rejection", description: "Price has rallied to a key historical resistance level and is showing signs of weakness. Look for a short entry." },
+            ];
+        }
+
+        function generateInitialCandles(scenario) {
+            candles = [];
+            let price = 60000 + (Math.random() - 0.5) * 5000;
+            // (Pattern generation logic is unchanged, remains here)
+            switch (scenario.title) {
+                case "Uptrend Bull Flag":
+                    for (let i = 0; i < 20; i++) { // Pole
+                        const open = price; const change = Math.random() * 150 + 50; price = open + change;
+                        candles.push({ open, high: price + Math.random() * 50, low: open - Math.random() * 50, close: price });
+                    }
+                    let flagHigh = price;
+                    for (let i = 0; i < 30; i++) { // Flag
+                        const open = price; const change = (Math.random() - 0.55) * 200;
+                        price = open + change > flagHigh ? flagHigh - Math.random() * 50 : open + change;
+                        candles.push({ open, high: Math.max(open, price) + Math.random() * 100, low: Math.min(open, price) - Math.random() * 100, close: price });
+                    }
+                    break;
+                case "Range Consolidation":
+                    let highRange = price + 500, lowRange = price - 500, direction = 1;
+                    for (let i = 0; i < 50; i++) {
+                        const open = price; const change = (Math.random() * 200) * direction; price = open + change;
+                        if (price > highRange) { price = highRange; direction = -1; }
+                        if (price < lowRange) { price = lowRange; direction = 1; }
+                        candles.push({ open, high: Math.max(open, price) + 50, low: Math.min(open, price) - 50, close: price });
+                    }
+                    break;
+                case "Support Level Bounce":
+                    let supportLevel = price - 1000;
+                    for (let i = 0; i < 35; i++) { // Downtrend
+                        const open = price; const change = (Math.random() * -150) - 20;
+                        price = open + change < supportLevel ? supportLevel + Math.random() * 50 : open + change;
+                        candles.push({ open, high: open + Math.random() * 50, low: price - Math.random() * 50, close: price });
+                    }
+                    for (let i = 0; i < 15; i++) { // Bounce
+                        const open = price; const change = (Math.random() - 0.4) * 200;
+                        price = open + change < supportLevel ? supportLevel : open + change;
+                        candles.push({ open, high: Math.max(open, price) + 100, low: Math.min(open, price) - 100, close: price });
+                    }
+                    break;
+                case "Resistance Rejection":
+                    let resistanceLevel = price + 1000;
+                    for (let i = 0; i < 35; i++) { // Uptrend
+                        const open = price; const change = (Math.random() * 150) + 20;
+                        price = open + change > resistanceLevel ? resistanceLevel - Math.random() * 50 : open + change;
+                        candles.push({ open, high: price + Math.random() * 50, low: open - Math.random() * 50, close: price });
+                    }
+                    for (let i = 0; i < 15; i++) { // Reject
+                        const open = price; const change = (Math.random() - 0.6) * 200;
+                        price = open + change > resistanceLevel ? resistanceLevel : open + change;
+                        candles.push({ open, high: Math.max(open, price) + 100, low: Math.min(open, price) - 100, close: price });
+                    }
+                    break;
+            }
+        }
+        
+        // --- Simulation Core ---
+        function generateNextCandle() {
+            const lastClose = candles[candles.length - 1].close;
+            const momentum = (lastClose - candles[candles.length - 5].close) / 5;
+            const volatility = 800;
+            const open = lastClose; const change = (Math.random() - 0.5 + momentum / volatility) * volatility;
+            const close = open + change;
+            const high = Math.max(open, close) + Math.random() * 200;
+            const low = Math.min(open, close) - Math.random() * 200;
+            candles.push({ open, high, low, close });
+            if(candles.length > maxCandles * 2) candles.shift();
+        }
+
+        function runSimulation() {
+            isSimulating = true; mainControls.style.display = 'none'; setupControls.style.display = 'none';
+            let unfilledCandleCount = 0;
+            const limitOrderTimeout = 50;
+
+            if (tradeActive) {
+                runningControls.style.display = 'grid';
+            }
+
+            simulationInterval = setInterval(() => {
+                generateNextCandle();
+                const currentHigh = candles[candles.length-1].high;
+                const currentLow = candles[candles.length-1].low;
+                const currentClose = candles[candles.length-1].close;
+
+                if (!tradeActive) {
+                    if (orderType === 'limit') {
+                        if ((tradeDirection === 1 && currentLow <= limitPrice) || (tradeDirection === -1 && currentHigh >= limitPrice)) {
+                            tradeActive = true; entryPrice = limitPrice; 
+                            plDisplay.style.display = 'block';
+                            runningControls.style.display = 'grid';
+                        } else {
+                            unfilledCandleCount++;
+                            if (unfilledCandleCount > limitOrderTimeout) {
+                                endSimulation('draw', 'Limit order not filled.');
+                            }
+                        }
+                    }
+                }
+                
+                if (tradeActive) {
+                    updatePL(currentClose);
+                    if (tradeDirection === 1) { // Long
+                        if (currentHigh >= takeProfit) { endSimulation('win', `Take Profit hit!`); } 
+                        else if (currentLow <= stopLoss) { endSimulation('loss', `Stop Loss hit!`); }
+                    } else if (tradeDirection === -1) { // Short
+                        if (currentLow <= takeProfit) { endSimulation('win', `Take Profit hit!`); } 
+                        else if (currentHigh >= stopLoss) { endSimulation('loss', `Stop Loss hit!`); }
+                    }
+                }
+                
+                drawChart();
+            }, 200);
+        }
+        
+        // --- Calculation & UI Updates ---
+        function updatePL(currentPrice) {
+            if (!tradeActive) return 0;
+            const effectivePositionSize = margin * leverage;
+            const units = effectivePositionSize / entryPrice;
+            const pL = (currentPrice - entryPrice) * units * tradeDirection;
+            plDisplay.textContent = `P/L: $${pL.toFixed(2)}`;
+            plDisplay.style.color = pL >= 0 ? 'var(--price-green)' : 'var(--price-red)';
+            return pL;
+        }
+        
+        function updateTradeMetrics() {
+            if (!tradeSetupMode) return;
+            const entry = (orderType === 'limit') ? limitPrice : candles[candles.length - 1].close;
+            const potentialReward = Math.abs(takeProfit - entry);
+            const potentialRisk = Math.abs(entry - stopLoss);
+            
+            // R/R
+            if (potentialRisk === 0) {
+                rrDisplay.textContent = 'Invalid R/R'; rrDisplay.className = 'chart-overlay-display rr-bad';
+            } else {
+                const ratio = potentialReward / potentialRisk;
+                rrDisplay.textContent = `R/R: ${ratio.toFixed(2)} : 1`;
+                if (ratio >= 2) { rrDisplay.className = 'chart-overlay-display rr-good'; } 
+                else if (ratio >= 1) { rrDisplay.className = 'chart-overlay-display rr-ok'; } 
+                else { rrDisplay.className = 'chart-overlay-display rr-bad'; }
+            }
+            
+            // Calculator
+            const effectivePositionSize = margin * leverage;
+            const units = effectivePositionSize / entry;
+            const profitValue = potentialReward * units;
+            const lossValue = potentialRisk * units;
+            potentialProfitEl.textContent = `$${profitValue.toFixed(2)}`;
+            potentialLossEl.textContent = `$${lossValue.toFixed(2)}`;
+        }
+
+        function endSimulation(result, message, manualClosePrice = null) {
+            if (!isSimulating) return;
+            clearInterval(simulationInterval); isSimulating = false; runningControls.style.display = 'none';
+            let finalPL = 0;
+            if (tradeActive) {
+                if (manualClosePrice !== null) {
+                     const effectivePositionSize = margin * leverage;
+                     const units = effectivePositionSize / entryPrice;
+                     finalPL = (manualClosePrice - entryPrice) * units * tradeDirection;
+                } else {
+                    if(result === 'win') finalPL = parseFloat(potentialProfitEl.textContent.substring(1));
+                    if(result === 'loss') finalPL = -parseFloat(potentialLossEl.textContent.substring(1));
+                }
+                balance += finalPL;
+            }
+            feedbackDiv.style.display = 'block'; 
+            feedbackDiv.className = `result-feedback ${result}`;
+            let finalMessage = message;
+            if (tradeActive && (result === 'win' || result === 'loss' || manualClosePrice !== null)) {
+                finalMessage += ` ${finalPL >= 0 ? '+' : ''}$${finalPL.toFixed(2)}`;
+            }
+            feedbackDiv.textContent = finalMessage; 
+            resetControls.style.display = 'grid';
+            balanceEl.textContent = `$${balance.toFixed(2)}`;
+        }
+        
+        // --- Event Listeners & Initialization ---
+        function enterTradeSetup(direction) {
+            tradeSetupMode = true; tradeDirection = direction;
+            const lastPrice = candles[candles.length - 1].close;
+            if (direction === 1) { // Long
+                takeProfit = lastPrice * 1.02; stopLoss = lastPrice * 0.98;
+                if (orderType === 'limit') limitPrice = lastPrice * 0.99;
+            } else { // Short
+                takeProfit = lastPrice * 0.98; stopLoss = lastPrice * 1.02;
+                if (orderType === 'limit') limitPrice = lastPrice * 1.01;
+            }
+            mainControls.style.display = 'none'; setupControls.style.display = 'grid';
+            rrDisplay.style.display = 'block'; updateTradeMetrics(); drawChart();
+        }
+
+        function cancelTradeSetup() {
+            tradeSetupMode = false;
+            stopLoss = 0; takeProfit = 0; limitPrice = 0; tradeDirection = 0;
+            mainControls.style.display = 'grid'; setupControls.style.display = 'none';
+            rrDisplay.style.display = 'none';
+            potentialProfitEl.textContent = ''; potentialLossEl.textContent = '';
+            drawChart();
+        }
+
+        function confirmTrade() {
+            const lastPrice = candles[candles.length - 1].close;
+            // Validation (unchanged, remains here)
+            if (orderType === 'limit') {
+                 if (tradeDirection === 1 && (limitPrice > lastPrice || takeProfit < limitPrice || stopLoss > limitPrice)) {
+                    alert("For a LONG LIMIT, your limit price must be below the current price, TP above limit, and SL below limit."); return;
+                }
+                 if (tradeDirection === -1 && (limitPrice < lastPrice || takeProfit > limitPrice || stopLoss < limitPrice)) {
+                    alert("For a SHORT LIMIT, your limit price must be above the current price, TP below limit, and SL above limit."); return;
+                }
+            } else { // Market Order
+                 if (tradeDirection === 1 && (takeProfit < lastPrice || stopLoss > lastPrice)) {
+                    alert("For a LONG MARKET, TP must be above current price, and SL must be below."); return;
+                 }
+                  if (tradeDirection === -1 && (takeProfit > lastPrice || stopLoss < lastPrice)) {
+                    alert("For a SHORT MARKET, TP must be below current price, and SL must be above."); return;
+                 }
+                tradeActive = true; entryPrice = lastPrice;
+                plDisplay.style.display = 'block'; updatePL(lastPrice);
+            }
+            tradeSetupMode = false; rrDisplay.style.display = 'none';
+            runSimulation();
+        }
+
+        function initialize() {
+            updateChartConstants(); setupScenarios();
+            currentScenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+            scenarioTitleEl.textContent = currentScenario.title;
+            scenarioDescEl.textContent = currentScenario.description;
+            generateInitialCandles(currentScenario);
+            isSimulating = false; tradeSetupMode = false; tradeActive = false;
+            stopLoss = 0; takeProfit = 0; limitPrice = 0; entryPrice = 0; tradeDirection = 0;
+            if (simulationInterval) clearInterval(simulationInterval);
+            mainControls.style.display = 'grid'; setupControls.style.display = 'none';
+            runningControls.style.display = 'none'; resetControls.style.display = 'none'; 
+            feedbackDiv.style.display = 'none';
+            plDisplay.style.display = 'none'; rrDisplay.style.display = 'none';
+            balanceEl.textContent = `$${balance.toFixed(2)}`;
+            margin = parseInt(positionSizeInput.value);
+            leverage = parseInt(leverageSlider.value);
+            potentialProfitEl.textContent = ''; potentialLossEl.textContent = '';
+            drawChart();
+        }
+        
+        limitOrderBtn.addEventListener('click', () => {
+            orderType = 'limit'; limitOrderBtn.classList.add('active'); marketOrderBtn.classList.remove('active');
+        });
+        marketOrderBtn.addEventListener('click', () => {
+            orderType = 'market'; marketOrderBtn.classList.add('active'); limitOrderBtn.classList.remove('active');
+        });
+        positionSizeInput.addEventListener('change', () => {
+            margin = parseInt(positionSizeInput.value) || 0;
+            if(tradeSetupMode) updateTradeMetrics();
+        });
+        leverageSlider.addEventListener('input', () => {
+            leverage = parseInt(leverageSlider.value);
+            leverageValueEl.textContent = `${leverage}x`;
+             if(tradeSetupMode) updateTradeMetrics();
+        });
+        
+        longButton.addEventListener('click', () => enterTradeSetup(1));
+        shortButton.addEventListener('click', () => enterTradeSetup(-1));
+        cancelButton.addEventListener('click', cancelTradeSetup);
+        confirmButton.addEventListener('click', confirmTrade);
+        resetButton.addEventListener('click', initialize);
+        closeButton.addEventListener('click', () => {
+            if (isSimulating && tradeActive) {
+                const closePrice = candles[candles.length - 1].close;
+                endSimulation('draw', 'Position closed manually', closePrice);
+            }
+        });
+
+        window.onload = initialize;
+        window.onresize = () => { updateChartConstants(); drawChart(); };
+    </script>
+</body>
+</html>
+
