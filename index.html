@@ -169,22 +169,22 @@
         </div>
         <div id="controls">
              <div class="controls-grid" id="main-controls">
-                <div id="order-type-selector">
-                    <button class="order-type-btn active" id="limit-order-btn">Limit Order</button>
-                    <button class="order-type-btn" id="market-order-btn">Market Order</button>
-                </div>
-                <button id="long-button">Enter Long</button>
-                <button id="short-button">Enter Short</button>
-            </div>
+                 <div id="order-type-selector">
+                     <button class="order-type-btn active" id="limit-order-btn">Limit Order</button>
+                     <button class="order-type-btn" id="market-order-btn">Market Order</button>
+                 </div>
+                 <button id="long-button">Enter Long</button>
+                 <button id="short-button">Enter Short</button>
+             </div>
              <div class="controls-grid" id="setup-controls" style="display: none;">
-                <button id="confirm-button">Confirm Trade</button>
-                <button id="cancel-button">Cancel</button>
-            </div>
+                 <button id="confirm-button">Confirm Trade</button>
+                 <button id="cancel-button">Cancel</button>
+             </div>
              <div class="controls-grid" id="running-controls" style="display: none;">
-                <button id="close-button">Close Position Manually</button>
+                 <button id="close-button">Close Position Manually</button>
              </div>
              <div class="controls-grid" id="reset-controls" style="display: none;">
-                <button id="reset-button">New Scenario</button>
+                 <button id="reset-button">New Scenario</button>
              </div>
         </div>
         
@@ -199,6 +199,10 @@
                     <input type="number" id="position-size" value="1000">
                 </div>
                 <div class="calc-item">
+                    <label>Position Size (USD)</label>
+                    <span id="total-position-size" class="value"></span>
+                </div>
+                <div class="calc-item">
                     <label>Potential Profit</label>
                     <span id="potential-profit" class="value" style="color: var(--price-green);"></span>
                 </div>
@@ -207,9 +211,9 @@
                     <span id="potential-loss" class="value" style="color: var(--price-red);"></span>
                 </div>
                  <div class="calc-item" style="grid-column: 1 / -1;">
-                    <label for="leverage-slider">Leverage: <span id="leverage-value">5x</span></label>
-                    <input type="range" id="leverage-slider" min="5" max="500" value="5" step="5">
-                </div>
+                     <label for="leverage-slider">Leverage: <span id="leverage-value">5x</span></label>
+                     <input type="range" id="leverage-slider" min="5" max="500" value="5" step="5">
+                 </div>
             </div>
         </div>
 
@@ -268,6 +272,7 @@
         const avgLossEl = document.getElementById('avg-loss');
         const historyTableBody = document.getElementById('history-table-body');
         const equityCurveSvg = document.getElementById('equity-curve-svg');
+        const totalPositionSizeEl = document.getElementById('total-position-size');
 
         // --- State ---
         let candles = [], scenarios = [], tradeHistory = [];
@@ -498,6 +503,11 @@
         }
         
         // --- Calculation & UI Updates ---
+        function updatePositionSizeDisplay() {
+            const totalSize = margin * leverage;
+            totalPositionSizeEl.textContent = `$${totalSize.toLocaleString()}`;
+        }
+
         function updatePL(currentPrice) {
             if (!tradeActive) return 0;
             const effectivePositionSize = margin * leverage;
@@ -681,7 +691,7 @@
                  if (tradeDirection === 1 && (takeProfit < lastPrice || stopLoss > lastPrice)) {
                     alert("For a LONG MARKET, TP must be above current price, and SL must be below."); return;
                  }
-                  if (tradeDirection === -1 && (takeProfit > lastPrice || stopLoss < lastPrice)) {
+                 if (tradeDirection === -1 && (takeProfit > lastPrice || stopLoss < lastPrice)) {
                     alert("For a SHORT MARKET, TP must be below current price, and SL must be above."); return;
                  }
                 tradeActive = true; entryPrice = lastPrice;
@@ -707,6 +717,7 @@
             balanceEl.textContent = `$${balance.toFixed(2)}`;
             margin = parseInt(positionSizeInput.value);
             leverage = parseInt(leverageSlider.value);
+            updatePositionSizeDisplay();
             potentialProfitEl.textContent = ''; potentialLossEl.textContent = '';
             drawChart();
         }
@@ -719,11 +730,13 @@
         });
         positionSizeInput.addEventListener('change', () => {
             margin = parseInt(positionSizeInput.value) || 0;
+            updatePositionSizeDisplay();
             if(tradeSetupMode) updateTradeMetrics();
         });
         leverageSlider.addEventListener('input', () => {
             leverage = parseInt(leverageSlider.value);
             leverageValueEl.textContent = `${leverage}x`;
+            updatePositionSizeDisplay();
              if(tradeSetupMode) updateTradeMetrics();
         });
         
@@ -745,4 +758,3 @@
     </script>
 </body>
 </html>
-
