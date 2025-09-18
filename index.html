@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Trading Simulator 6.2</title>
+    <title>Bitcoin Trading Simulator 7.0</title>
     <style>
         /* --- Basic Styling (The CSS) --- */
         :root {
@@ -94,7 +94,7 @@
         #tp-label { fill: var(--price-green); }
         #limit-label { fill: var(--highlight-blue); }
 
-        h1 { text-align: center; color: #FFFFFF; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
+        h1, h2 { text-align: center; color: #FFFFFF; padding-bottom: 10px; margin-top: 0; margin-bottom: 15px; }
 
         .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: center; }
 
@@ -120,8 +120,8 @@
         #reset-button { background-color: #616161; grid-column: 1 / -1; }
         #close-button { background-color: var(--bitcoin-orange); grid-column: 1 / -1;}
         
-        #calculator {
-            background-color: #2c2c2c; border-radius: 8px;
+        .section-box {
+             background-color: #2c2c2c; border-radius: 8px;
             padding: 15px; margin-top: 20px;
         }
         .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
@@ -142,11 +142,22 @@
         .win { background-color: rgba(38, 166, 154, 0.2); border: 2px solid var(--price-green); color: var(--price-green); }
         .loss { background-color: rgba(239, 83, 80, 0.2); border: 2px solid var(--price-red); color: var(--price-red); }
         .draw { background-color: rgba(189, 189, 189, 0.2); border: 2px solid #BDBDBD; color: #BDBDBD; }
+
+        #performance-stats .calc-item .value { font-size: 1.1em; }
+        
+        #history-log { max-height: 200px; overflow-y: auto; }
+        #history-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        #history-table th, #history-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        #history-table th { font-size: 0.8em; color: var(--text-soft-color); }
+        #equity-curve-svg { width: 100%; height: 100px; margin-top: 10px; }
+        #equity-curve-path { stroke: var(--highlight-blue); stroke-width: 2; fill: none; }
+        #equity-curve-zero-line { stroke: var(--border-color); stroke-width: 1; stroke-dasharray: 4;}
+
     </style>
 </head>
 <body>
     <div id="container">
-        <h1>Bitcoin Trade Simulator 6.2</h1>
+        <h1>Bitcoin Trading Simulator 7.0</h1>
         <div id="scenario-info">
             <h3 id="scenario-title"></h3>
             <p id="scenario-desc"></p>
@@ -177,7 +188,7 @@
              </div>
         </div>
         
-        <div id="calculator">
+        <div id="calculator" class="section-box">
             <div class="calc-grid">
                 <div class="calc-item">
                     <label>Account Balance</label>
@@ -199,6 +210,26 @@
                     <label for="leverage-slider">Leverage: <span id="leverage-value">5x</span></label>
                     <input type="range" id="leverage-slider" min="5" max="500" value="5" step="5">
                 </div>
+            </div>
+        </div>
+
+        <div id="performance-section" class="section-box" style="display: none;">
+            <h2>Performance</h2>
+            <div id="performance-stats" class="calc-grid">
+                <div class="calc-item"><label>Win Rate</label><span id="win-rate" class="value"></span></div>
+                <div class="calc-item"><label>Total P/L</label><span id="total-pl" class="value"></span></div>
+                <div class="calc-item"><label>Avg. Win</label><span id="avg-win" class="value"></span></div>
+                <div class="calc-item"><label>Avg. Loss</label><span id="avg-loss" class="value"></span></div>
+            </div>
+            <svg id="equity-curve-svg"></svg>
+            <h2>Trade History</h2>
+            <div id="history-log">
+                <table id="history-table">
+                    <thead>
+                        <tr><th>Scenario</th><th>Side</th><th>Entry</th><th>Exit</th><th>Leverage</th><th>P/L</th></tr>
+                    </thead>
+                    <tbody id="history-table-body"></tbody>
+                </table>
             </div>
         </div>
         
@@ -230,12 +261,19 @@
         const potentialLossEl = document.getElementById('potential-loss');
         const leverageSlider = document.getElementById('leverage-slider');
         const leverageValueEl = document.getElementById('leverage-value');
+        const performanceSection = document.getElementById('performance-section');
+        const winRateEl = document.getElementById('win-rate');
+        const totalPlEl = document.getElementById('total-pl');
+        const avgWinEl = document.getElementById('avg-win');
+        const avgLossEl = document.getElementById('avg-loss');
+        const historyTableBody = document.getElementById('history-table-body');
+        const equityCurveSvg = document.getElementById('equity-curve-svg');
 
         // --- State ---
-        let candles = [], scenarios = [];
+        let candles = [], scenarios = [], tradeHistory = [];
         let simulationInterval;
         let isSimulating = false, tradeSetupMode = false, tradeActive = false;
-        let stopLoss = 0, takeProfit = 0, limitPrice = 0, entryPrice = 0;
+        let stopLoss = 0, takeProfit = 0, limitPrice = 0, entryPrice = 0, exitPrice = 0;
         let tradeDirection = 0, orderType = 'limit';
         let currentScenario;
         let balance = 10000, margin = 1000, leverage = 5;
@@ -447,11 +485,11 @@
                 if (tradeActive) {
                     updatePL(currentClose);
                     if (tradeDirection === 1) { // Long
-                        if (currentHigh >= takeProfit) { endSimulation('win', `Take Profit hit!`); } 
-                        else if (currentLow <= stopLoss) { endSimulation('loss', `Stop Loss hit!`); }
+                        if (currentHigh >= takeProfit) { endSimulation('win', `Take Profit hit!`, takeProfit); } 
+                        else if (currentLow <= stopLoss) { endSimulation('loss', `Stop Loss hit!`, stopLoss); }
                     } else if (tradeDirection === -1) { // Short
-                        if (currentLow <= takeProfit) { endSimulation('win', `Take Profit hit!`); } 
-                        else if (currentHigh >= stopLoss) { endSimulation('loss', `Stop Loss hit!`); }
+                        if (currentLow <= takeProfit) { endSimulation('win', `Take Profit hit!`, takeProfit); } 
+                        else if (currentHigh >= stopLoss) { endSimulation('loss', `Stop Loss hit!`, stopLoss); }
                     }
                 }
                 
@@ -476,18 +514,16 @@
             const potentialReward = Math.abs(takeProfit - entry);
             const potentialRisk = Math.abs(entry - stopLoss);
             
-            // R/R
-            if (potentialRisk === 0) {
-                rrDisplay.textContent = 'Invalid R/R'; rrDisplay.className = 'chart-overlay-display rr-bad';
-            } else {
+            if (potentialRisk > 0) {
                 const ratio = potentialReward / potentialRisk;
                 rrDisplay.textContent = `R/R: ${ratio.toFixed(2)} : 1`;
                 if (ratio >= 2) { rrDisplay.className = 'chart-overlay-display rr-good'; } 
                 else if (ratio >= 1) { rrDisplay.className = 'chart-overlay-display rr-ok'; } 
                 else { rrDisplay.className = 'chart-overlay-display rr-bad'; }
+            } else {
+                rrDisplay.textContent = 'Invalid R/R'; rrDisplay.className = 'chart-overlay-display rr-bad';
             }
             
-            // Calculator
             const effectivePositionSize = margin * leverage;
             const units = effectivePositionSize / entry;
             const profitValue = potentialReward * units;
@@ -496,32 +532,117 @@
             potentialLossEl.textContent = `$${lossValue.toFixed(2)}`;
         }
 
-        function endSimulation(result, message, manualClosePrice = null) {
-            if (!isSimulating) return;
+        function endSimulation(result, message, finalPrice) {
+            if (!isSimulating && result !== 'draw') return; // Prevent multiple calls
             clearInterval(simulationInterval); isSimulating = false; runningControls.style.display = 'none';
-            let finalPL = 0;
+            let finalPL = 0; exitPrice = finalPrice;
             if (tradeActive) {
-                if (manualClosePrice !== null) {
-                     const effectivePositionSize = margin * leverage;
-                     const units = effectivePositionSize / entryPrice;
-                     finalPL = (manualClosePrice - entryPrice) * units * tradeDirection;
-                } else {
-                    if(result === 'win') finalPL = parseFloat(potentialProfitEl.textContent.substring(1));
-                    if(result === 'loss') finalPL = -parseFloat(potentialLossEl.textContent.substring(1));
-                }
+                const effectivePositionSize = margin * leverage;
+                const units = effectivePositionSize / entryPrice;
+                finalPL = (exitPrice - entryPrice) * units * tradeDirection;
                 balance += finalPL;
             }
+            
             feedbackDiv.style.display = 'block'; 
             feedbackDiv.className = `result-feedback ${result}`;
             let finalMessage = message;
-            if (tradeActive && (result === 'win' || result === 'loss' || manualClosePrice !== null)) {
+            if (tradeActive) {
                 finalMessage += ` ${finalPL >= 0 ? '+' : ''}$${finalPL.toFixed(2)}`;
             }
             feedbackDiv.textContent = finalMessage; 
             resetControls.style.display = 'grid';
             balanceEl.textContent = `$${balance.toFixed(2)}`;
+
+            logTrade(result, finalPL);
         }
         
+        // --- Performance Tracking ---
+        function logTrade(result, pL) {
+            if (result === 'draw') return; // Don't log non-trades
+
+            const trade = {
+                scenario: currentScenario.title,
+                side: tradeDirection === 1 ? 'Long' : 'Short',
+                entry: entryPrice.toFixed(2),
+                exit: exitPrice.toFixed(2),
+                leverage: `${leverage}x`,
+                pl: pL,
+            };
+            tradeHistory.push(trade);
+            updatePerformanceStats();
+            renderTradeHistory();
+            drawEquityCurve();
+        }
+
+        function updatePerformanceStats() {
+            performanceSection.style.display = 'block';
+            const totalTrades = tradeHistory.length;
+            const wins = tradeHistory.filter(t => t.pl > 0);
+            const losses = tradeHistory.filter(t => t.pl < 0);
+
+            const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
+            winRateEl.textContent = `${winRate.toFixed(1)}%`;
+
+            const totalPL = tradeHistory.reduce((sum, t) => sum + t.pl, 0);
+            totalPlEl.textContent = `$${totalPL.toFixed(2)}`;
+            totalPlEl.style.color = totalPL >= 0 ? 'var(--price-green)' : 'var(--price-red)';
+
+            const avgWin = wins.length > 0 ? wins.reduce((sum, t) => sum + t.pl, 0) / wins.length : 0;
+            avgWinEl.textContent = `$${avgWin.toFixed(2)}`;
+            avgWinEl.style.color = 'var(--price-green)';
+
+            const avgLoss = losses.length > 0 ? losses.reduce((sum, t) => sum + t.pl, 0) / losses.length : 0;
+            avgLossEl.textContent = `$${avgLoss.toFixed(2)}`;
+            avgLossEl.style.color = 'var(--price-red)';
+        }
+
+        function renderTradeHistory() {
+            historyTableBody.innerHTML = '';
+            [...tradeHistory].reverse().forEach(trade => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${trade.scenario}</td>
+                    <td>${trade.side}</td>
+                    <td>${trade.entry}</td>
+                    <td>${trade.exit}</td>
+                    <td>${trade.leverage}</td>
+                    <td style="color: ${trade.pl >= 0 ? 'var(--price-green)' : 'var(--price-red)'};">${trade.pl.toFixed(2)}</td>
+                `;
+                historyTableBody.appendChild(row);
+            });
+        }
+        
+        function drawEquityCurve() {
+            equityCurveSvg.innerHTML = '';
+            if (tradeHistory.length < 2) return;
+            
+            let equityPoints = [10000];
+            tradeHistory.forEach(trade => equityPoints.push(equityPoints[equityPoints.length - 1] + trade.pl));
+
+            const width = equityCurveSvg.clientWidth;
+            const height = equityCurveSvg.clientHeight;
+            const maxBalance = Math.max(...equityPoints);
+            const minBalance = Math.min(...equityPoints, 10000);
+
+            const balanceToY = (val) => height - ((val - minBalance) / (maxBalance - minBalance)) * height;
+            const indexToX = (i) => (i / (equityPoints.length - 1)) * width;
+
+            const pathData = equityPoints.map((point, i) => `${i === 0 ? 'M' : 'L'} ${indexToX(i)} ${balanceToY(point)}`).join(' ');
+            
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathData);
+            path.setAttribute('id', 'equity-curve-path');
+
+            const zeroLineY = balanceToY(10000);
+            const zeroLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            zeroLine.setAttribute('x1', 0); zeroLine.setAttribute('y1', zeroLineY);
+            zeroLine.setAttribute('x2', width); zeroLine.setAttribute('y2', zeroLineY);
+            zeroLine.setAttribute('id', 'equity-curve-zero-line');
+
+            equityCurveSvg.appendChild(zeroLine);
+            equityCurveSvg.appendChild(path);
+        }
+
         // --- Event Listeners & Initialization ---
         function enterTradeSetup(direction) {
             tradeSetupMode = true; tradeDirection = direction;
@@ -614,7 +735,8 @@
         closeButton.addEventListener('click', () => {
             if (isSimulating && tradeActive) {
                 const closePrice = candles[candles.length - 1].close;
-                endSimulation('draw', 'Position closed manually', closePrice);
+                const result = updatePL(closePrice) >= 0 ? 'win' : 'loss';
+                endSimulation(result, 'Position closed manually', closePrice);
             }
         });
 
